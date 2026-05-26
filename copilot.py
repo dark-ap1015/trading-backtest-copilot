@@ -3,10 +3,13 @@ import anthropic
 from e2b_code_interpreter import Sandbox
 from dotenv import load_dotenv
 
+# Provides API keys for Anthropic and E2B from a .env file
 load_dotenv()
 
+# Initialize the Anthropic client
 client = anthropic.Anthropic()
 
+# Helper function to remove markdown formatting and guarantees only raw Python is passed into the sandbox
 def clean_code(code: str) -> str:
     code = code.strip()
 
@@ -20,6 +23,7 @@ def clean_code(code: str) -> str:
 
     return code.strip()
 
+# System prompt for Claude
 SYSTEM_PROMPT = """You are an expert algorithmic trading developer.
 When given a strategy description and ticker, write a complete, runnable 
 Python backtest using vectorbt (latest stable version).
@@ -46,6 +50,7 @@ End date: {end}
 
 Write the backtest code now."""
 
+# Generate vectorbt backtest code using Claude based on user's strategy and parameters
 def generate_code(strategy, ticker, start, end):
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -63,6 +68,7 @@ def generate_code(strategy, ticker, start, end):
         
     raise ValueError("Claude returned no text output")
 
+# Execute generated Python code inside an isolated E2B sandbox
 def run_code(code, retries=2):
     sandbox = Sandbox.create()
 
@@ -90,7 +96,8 @@ def run_code(code, retries=2):
 
     finally:
         sandbox.kill()
-    
+
+# Ask Claude to fix code that threw an error, provides error message and original code for context
 def fix_code(code, error):
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
