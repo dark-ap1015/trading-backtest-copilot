@@ -3,11 +3,10 @@ import anthropic
 from e2b_code_interpreter import Sandbox
 from dotenv import load_dotenv
 
-# Provides API keys for Anthropic and E2B from a .env file
-load_dotenv()
+load_dotenv() # Provides API keys for Anthropic and E2B from a .env file
 
-# Initialize the Anthropic client
-client = anthropic.Anthropic()
+client = anthropic.Anthropic() # Initialize the Anthropic client
+
 
 # Helper function to remove markdown formatting and guarantees only raw Python is passed into the sandbox
 def clean_code(code: str) -> str:
@@ -23,6 +22,7 @@ def clean_code(code: str) -> str:
 
     return code.strip()
 
+
 # System prompt for Claude
 SYSTEM_PROMPT = """You are an expert algorithmic trading developer.
 When given a strategy description and ticker, write a complete, runnable 
@@ -32,7 +32,7 @@ Rules:
 - Data is fetched with yfinance: df = yf.download(ticker, start=start, end=end, auto_adjust=True)
 - Use df['Close'] (capital C) as the price series — yfinance returns capital column names
 - Generate entry and exit boolean Series separately before calling from_signals()
-- Use vbt.Portfolio.from_signals(close, entries, exits, init_cash=10_000, fees=0.001)
+- Use vbt.Portfolio.from_signals(close, entries, exits, init_cash=50_000, fees=0.001)
 - Print portfolio.stats() at the end — nothing else
 - Do not use from_order_func, parameterized decorators, or vbt accessors
 - Output format is STRICT:
@@ -49,6 +49,58 @@ Start date: {start}
 End date: {end}
 
 Write the backtest code now."""
+
+
+# Explanation prompt for Claude
+EXPLANATION_PROMPT = """You are a trading strategy analyst explaining backtest results to someone 
+who understands the strategy but may not know every performance metric.
+
+Here are the backtest results for the following strategy:
+Strategy: {strategy}
+Ticker: {ticker}
+Period: {start} to {end}
+
+Results:
+{stats}
+
+Write a plain-English explanation covering:
+1. Overall verdict — did this strategy work or not, and by how much?
+2. Key metrics — explain Total Return, Sharpe Ratio, Max Drawdown, and Win Rate in plain terms
+3. What the results suggest about how the strategy behaves (e.g. trades rarely but accurately, 
+   or trades often with small losses that add up)
+4. At least one specific, actionable suggestion to improve the strategy
+    - If possible, suggest the newly improved strategy in plain-English
+
+Keep it concise — 4 short paragraphs maximum. Do not repeat the raw numbers excessively; 
+focus on what they mean.
+
+Formatting rules:
+- Plain text only — no markdown
+- No headers, no bold, no bullet points
+- No ## symbols, no ** symbols, no -- symbols
+- Use paragraph breaks only"""
+
+
+# Use Claude to generate a plain-English explanation of the backtest results
+def explain_results(strategy, ticker, start, end, stats_text):
+    message = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=1000,
+        messages=[
+            {"role": "user", "content": EXPLANATION_PROMPT.format(
+                strategy=strategy,
+                ticker=ticker,
+                start=start,
+                end=end,
+                stats=stats_text
+            )}
+        ]
+    )
+    for block in message.content:
+        if block.type == "text":
+            return block.text.strip()
+    raise ValueError("Claude returned no explanation")
+
 
 # Generate vectorbt backtest code using Claude based on user's strategy and parameters
 def generate_code(strategy, ticker, start, end):
@@ -68,13 +120,14 @@ def generate_code(strategy, ticker, start, end):
         
     raise ValueError("Claude returned no text output")
 
+
 # Execute generated Python code inside an isolated E2B sandbox
 def run_code(code, retries=2):
     sandbox = Sandbox.create()
 
     # Install vectorbt inside the E2B sandbox
     try:
-        sandbox.commands.run("pip install vectorbt --quiet")
+        sandbox.commands.run("pip install vectorbt yfinance --quiet")
 
         for attempt in range(retries + 1):
             if not isinstance(code, str):
@@ -127,19 +180,28 @@ def main():
     start = input("Start date (YYYY-MM-DD): ")
     end = input("End date (YYYY-MM-DD): ")
     
-    print("\n[Generating code...]\n")
+    # print("\n[Generating code...]\n")
     code = generate_code(strategy, ticker, start, end)
     
-    print("--- Generated code ---")
-    print(code)
-    print("----------------------\n")
+    # print("--- Generated code ---")
+    # print(code)
+    # print("----------------------\n")
     
-    print("[Running backtest in E2B sandbox...]\n")
+    # print("[Running backtest in E2B sandbox...]\n")
     output = run_code(code)
     
     if output:
+        stats_text = "\n".join(output)
         print("--- Results ---")
-        print("\n".join(output))
+        print(stats_text)
+
+        if "Total Return" not in stats_text:
+            print("\n[Warning: stats output looks incomplete — unable to provide explanation]")
+        else:
+            # print("\n[Generating explanation...]\n")
+            explanation = explain_results(strategy, ticker, start, end, stats_text)
+            print("--- Analysis ---")
+            print(explanation)
 
 if __name__ == "__main__":
     main()
