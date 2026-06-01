@@ -180,14 +180,14 @@ def main():
     start = input("Start date (YYYY-MM-DD): ")
     end = input("End date (YYYY-MM-DD): ")
     
-    # print("\n[Generating code...]\n")
+    print("\n[Generating code...]\n")
     code = generate_code(strategy, ticker, start, end)
     
     # print("--- Generated code ---")
     # print(code)
     # print("----------------------\n")
     
-    # print("[Running backtest in E2B sandbox...]\n")
+    print("[Running backtest in E2B sandbox...]\n")
     output = run_code(code)
     
     if output:
@@ -198,7 +198,7 @@ def main():
         if "Total Return" not in stats_text:
             print("\n[Warning: stats output looks incomplete — unable to provide explanation]")
         else:
-            # print("\n[Generating explanation...]\n")
+            print("\n[Generating explanation...]\n")
             explanation = explain_results(strategy, ticker, start, end, stats_text)
             print("--- Analysis ---")
             print(explanation)
