@@ -54,9 +54,21 @@ def fetch_yfinance(ticker: str, start: str, end: str) -> pd.DataFrame:
     result = yf.download(ticker, start=start, end=end, auto_adjust=True, progress=False)
     if result is None or result.empty:
         raise ValueError(f"yfinance returned no data for {ticker} ({start} to {end})")
+    
     df: pd.DataFrame = result
+
+    # Fix 1 — Flatten multi-level columns (yfinance newer versions return
+    # ('Close', 'ES') tuples instead of plain 'Close' strings)
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [col[0] for col in df.columns]
+
+    # Fix 2 — Ensure index is named 'Date' so CSV serialization is consistent
+    df.index.name = "Date"
+
+    # Fix 3 — Strip timezone from daily data so it aligns with intraday
     if isinstance(df.index, pd.DatetimeIndex) and df.index.tz is not None:
         df.index = df.index.tz_localize(None)
+
     return df
 
 

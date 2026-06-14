@@ -43,18 +43,20 @@ def main():
         print(f"[Data fetch failed] {e}")
         return
 
-    print(f"  Primary   : {len(df):,} bars of {data_profile['primary_timeframe']} data")
+    print(f"Primary: {len(df):,} bars of {data_profile['primary_timeframe']} data")
     if df_higher is not None:
         secondary_tf = data_profile.get("secondary_timeframe", "daily")
-        print(f"  Secondary : {len(df_higher):,} bars of {secondary_tf} data")
+        print(f"Secondary: {len(df_higher):,} bars of {secondary_tf} data")
     print()
+
+    df, df_higher = fetch_data(ticker, start, end, data_profile)
 
     # ── Step 4: Generate code ─────────────────────────────────────────────────
     print("[Generating backtest code...]\n")
     code = generate_code(strategy, ticker, start, end, data_profile)
-    print("--- Generated code ---")
-    print(code)
-    print("----------------------\n")
+    # print("--- Generated code ---")
+    # print(code)
+    # print("----------------------\n")
 
     # ── Step 5: Run in sandbox ────────────────────────────────────────────────
     print("[Running backtest in E2B sandbox...]\n")

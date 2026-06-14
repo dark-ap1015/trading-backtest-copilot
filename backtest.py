@@ -1,4 +1,5 @@
 import anthropic
+import pandas as pd
 
 from e2b_code_interpreter import Sandbox
 from prompts import (
@@ -41,7 +42,7 @@ def generate_code(
     system = _pick_system_prompt(data_profile)
     message = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1500,
+        max_tokens=8096,
         system=system,
         messages=[{
             "role": "user",
@@ -59,7 +60,7 @@ def generate_code(
 def fix_code(code: str, error: str) -> str:
     message = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1500,
+        max_tokens=8096,
         messages=[{
             "role": "user",
             "content": (
@@ -75,12 +76,17 @@ def fix_code(code: str, error: str) -> str:
     raise ValueError("Claude returned no fix")
 
 
-def _build_setup_code(df, df_higher=None) -> str:
-    """
-    Serialize DataFrames to CSV strings for injection into the sandbox.
-    Returns the Python setup code that recreates them inside E2B.
-    """
-    df_csv = df.to_csv()
+def _build_setup_code(
+    df: pd.DataFrame,
+    df_higher: pd.DataFrame | None = None,
+) -> str:
+    def df_to_csv_safe(frame: pd.DataFrame) -> str:
+        # Ensure index has a consistent name before serializing
+        f = frame.copy()
+        f.index.name = "Date"
+        return f.to_csv()
+
+    df_csv = df_to_csv_safe(df)
     lines = [
         "import pandas as pd",
         "import io",
@@ -88,7 +94,7 @@ def _build_setup_code(df, df_higher=None) -> str:
     ]
 
     if df_higher is not None:
-        df_higher_csv = df_higher.to_csv()
+        df_higher_csv = df_to_csv_safe(df_higher)
         lines.append(
             f"df_higher = pd.read_csv(io.StringIO({repr(df_higher_csv)}), index_col='Date', parse_dates=True)"
         )
@@ -113,7 +119,7 @@ def run_code(
     setup: str = ""
     if not is_daily:
         setup = _build_setup_code(df, df_higher)
-        
+
     sandbox = Sandbox.create()
     try:
         sandbox.commands.run("pip install vectorbt yfinance --quiet")
