@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from backend.classifier import classify_strategy
 from backend.data import fetch_data
 from backend.backtest import generate_code, run_code
-from backend.explainer import explain_results
+from backend.explainer import explain_results, explain_trade
 
 load_dotenv()
 
@@ -32,6 +32,7 @@ class BacktestResponse(BaseModel):
     stats: str
     explanation: str
     equity_curve: list[dict]   # [{date: str, value: float}, ...]
+    trades: list[dict]
     classifier: dict
 
 
@@ -70,6 +71,7 @@ async def run_backtest(req: BacktestRequest):
             stats=stats_clean,
             explanation=explanation,
             equity_curve=_parse_equity_curve(stats_text),
+            trades=_parse_trades(stats_text),
             classifier=data_profile,
         )
 
@@ -77,21 +79,39 @@ async def run_backtest(req: BacktestRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+class TradeCommentaryRequest(BaseModel):
+    strategy: str
+    ticker: str
+    trade: dict   # one row from the trades list
+
+
+class TradeCommentaryResponse(BaseModel):
+    commentary: str
+
+
+@app.post("/trade-commentary", response_model=TradeCommentaryResponse)
+async def trade_commentary(req: TradeCommentaryRequest):
+    try:
+        commentary = explain_trade(req.strategy, req.ticker, req.trade)
+        return TradeCommentaryResponse(commentary=commentary)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def _parse_equity_curve(stats_text: str) -> list[dict]:
-    """
-    Parses the equity curve CSV from the sandbox stdout.
-    The generated code prints portfolio.value().to_csv() after '---EQUITY---'.
-    """
     if "---EQUITY---" not in stats_text:
         return []
 
-    parts = stats_text.split("---EQUITY---")
-    if len(parts) < 2:
-        return []
+    after_equity = stats_text.split("---EQUITY---")[1]
 
-    csv_block = parts[1].strip()
+    # Equity block ends where the trades sentinel begins (if present)
+    if "---TRADES---" in after_equity:
+        csv_block = after_equity.split("---TRADES---")[0].strip()
+    else:
+        csv_block = after_equity.strip()
+
     rows = []
     for line in csv_block.splitlines():
         line = line.strip()
@@ -107,8 +127,39 @@ def _parse_equity_curve(stats_text: str) -> list[dict]:
     return rows
 
 
+def _parse_trades(stats_text: str) -> list[dict]:
+    """
+    Parses the trade records CSV from the sandbox stdout.
+    The generated code prints portfolio.trades.records_readable.to_csv()
+    after the '---TRADES---' sentinel.
+    """
+    if "---TRADES---" not in stats_text:
+        return []
+
+    # Trades block is always last, so split and take everything after
+    block = stats_text.split("---TRADES---")[1].strip()
+
+    lines = block.splitlines()
+    if len(lines) < 2:
+        return []
+
+    headers = [h.strip() for h in lines[0].split(",")]
+    trades = []
+
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+        values = line.split(",")
+        if len(values) != len(headers):
+            continue
+        row = dict(zip(headers, values))
+        trades.append(row)
+
+    return trades
+
+
 def _parse_stats_only(stats_text: str) -> str:
-    """Strip the equity CSV section — frontend only needs the stats table."""
+    """Strip both the equity and trades CSV sections — frontend only needs the stats table."""
     if "---EQUITY---" in stats_text:
         return stats_text.split("---EQUITY---")[0].strip()
     return stats_text
