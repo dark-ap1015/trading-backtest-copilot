@@ -45,10 +45,12 @@ Rules:
 - Use df['Close'] (capital C) as the price series
 - Generate entry and exit boolean Series separately before calling from_signals()
 - Use vbt.Portfolio.from_signals(close, entries, exits, init_cash=50_000, fees=0.001)
-- At the end, print BOTH of the following and nothing else:
+- At the end, print ALL of the following and nothing else, in this exact order:
     1. portfolio.stats()
     2. The string '---EQUITY---' on its own line
     3. portfolio.value().rename('value').to_csv()
+    4. The string '---TRADES---' on its own line
+    5. portfolio.trades.records_readable.to_csv(index=False)
 - Do not use from_order_func, parameterized decorators, or vbt accessors
 - Output format is STRICT:
     - Return ONLY raw Python code
@@ -69,10 +71,12 @@ Rules:
 - Use df['Close'] as the price series
 - Generate entry and exit boolean Series separately before calling from_signals()
 - Use vbt.Portfolio.from_signals(close, entries, exits, init_cash=50_000, fees=0.001)
-- At the end, print BOTH of the following and nothing else:
+- At the end, print ALL of the following and nothing else, in this exact order:
     1. portfolio.stats()
     2. The string '---EQUITY---' on its own line
     3. portfolio.value().rename('value').to_csv()
+    4. The string '---TRADES---' on its own line
+    5. portfolio.trades.records_readable.to_csv(index=False)
 - Do not use from_order_func, parameterized decorators, or vbt accessors
 - Output format is STRICT:
     - Return ONLY raw Python code
@@ -97,10 +101,12 @@ Rules:
 - Use df['Close'] as the primary price series for from_signals()
 - Generate entry and exit boolean Series separately before calling from_signals()
 - Use vbt.Portfolio.from_signals(close, entries, exits, init_cash=10_000, fees=0.001)
-- At the end, print BOTH of the following and nothing else:
+- At the end, print ALL of the following and nothing else, in this exact order:
     1. portfolio.stats()
     2. The string '---EQUITY---' on its own line
     3. portfolio.value().rename('value').to_csv()
+    4. The string '---TRADES---' on its own line
+    5. portfolio.trades.records_readable.to_csv(index=False)
 - Output format is STRICT:
     - Return ONLY raw Python code
     - Do NOT wrap in triple backticks
@@ -137,3 +143,23 @@ Formatting rules:
 - No headers, no bold, no bullet points
 - No ## symbols, no ** symbols, no -- symbols
 - Paragraph breaks only"""
+
+
+TRADE_COMMENTARY_PROMPT = """You are a trading analyst commenting on a single trade 
+from a backtest. Be brief and specific — 2 to 3 sentences maximum.
+
+Strategy: {strategy}
+Ticker: {ticker}
+
+Trade details:
+Direction: {direction}
+Entry time: {entry_time}
+Entry price: {entry_price}
+Exit time: {exit_time}
+Exit price: {exit_price}
+P&L: {pnl}
+Return: {return_pct}
+
+Comment on whether this was a good or bad execution of the strategy's logic, 
+and anything notable about the trade. Plain text only — no markdown, no headers, 
+no bullet points, no ## symbols, no ** symbols, no -- symbols."""
