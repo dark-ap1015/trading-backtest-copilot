@@ -1,7 +1,7 @@
 import json
 import anthropic
 
-from prompts import CLASSIFIER_PROMPT
+from backend.prompts import CLASSIFIER_PROMPT
 
 client = anthropic.Anthropic()
 

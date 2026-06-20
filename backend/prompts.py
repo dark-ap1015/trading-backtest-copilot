@@ -45,7 +45,10 @@ Rules:
 - Use df['Close'] (capital C) as the price series
 - Generate entry and exit boolean Series separately before calling from_signals()
 - Use vbt.Portfolio.from_signals(close, entries, exits, init_cash=50_000, fees=0.001)
-- Print portfolio.stats() at the end — nothing else
+- At the end, print BOTH of the following and nothing else:
+    1. portfolio.stats()
+    2. The string '---EQUITY---' on its own line
+    3. portfolio.value().rename('value').to_csv()
 - Do not use from_order_func, parameterized decorators, or vbt accessors
 - Output format is STRICT:
     - Return ONLY raw Python code
@@ -66,7 +69,10 @@ Rules:
 - Use df['Close'] as the price series
 - Generate entry and exit boolean Series separately before calling from_signals()
 - Use vbt.Portfolio.from_signals(close, entries, exits, init_cash=50_000, fees=0.001)
-- Print portfolio.stats() at the end — nothing else
+- At the end, print BOTH of the following and nothing else:
+    1. portfolio.stats()
+    2. The string '---EQUITY---' on its own line
+    3. portfolio.value().rename('value').to_csv()
 - Do not use from_order_func, parameterized decorators, or vbt accessors
 - Output format is STRICT:
     - Return ONLY raw Python code
@@ -91,7 +97,10 @@ Rules:
 - Use df['Close'] as the primary price series for from_signals()
 - Generate entry and exit boolean Series separately before calling from_signals()
 - Use vbt.Portfolio.from_signals(close, entries, exits, init_cash=10_000, fees=0.001)
-- Print portfolio.stats() at the end — nothing else
+- At the end, print BOTH of the following and nothing else:
+    1. portfolio.stats()
+    2. The string '---EQUITY---' on its own line
+    3. portfolio.value().rename('value').to_csv()
 - Output format is STRICT:
     - Return ONLY raw Python code
     - Do NOT wrap in triple backticks

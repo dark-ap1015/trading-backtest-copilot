@@ -2,7 +2,7 @@ import anthropic
 import pandas as pd
 
 from e2b_code_interpreter import Sandbox
-from prompts import (
+from backend.prompts import (
     CODE_GEN_PROMPT,
     SYSTEM_PROMPT_DAILY,
     SYSTEM_PROMPT_INTRADAY,

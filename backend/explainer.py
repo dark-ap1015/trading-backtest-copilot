@@ -1,6 +1,6 @@
 import anthropic
 
-from prompts import EXPLANATION_PROMPT
+from backend.prompts import EXPLANATION_PROMPT
 
 client = anthropic.Anthropic()
 
