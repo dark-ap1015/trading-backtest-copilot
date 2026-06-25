@@ -3,6 +3,8 @@ import {
   Tooltip, ResponsiveContainer
 } from "recharts"
 
+import TradeReplay from "./TradeReplay"
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface EquityPoint {
@@ -26,10 +28,15 @@ interface FormData {
   end: string
 }
 
+interface Trade {
+  [key: string]: string
+}
+
 interface BacktestResults {
   stats: string
   explanation: string
   equity_curve: EquityPoint[]
+  trades: Trade[]          // NEW
   classifier: ClassifierProfile
   formData: FormData
 }
@@ -208,7 +215,15 @@ export default function ResultsView({ results, onReset }: ResultsViewProps) {
             </LineChart>
           </ResponsiveContainer>
         </div>
+
+        
       )}
+
+      <TradeReplay
+        trades={results.trades}
+        strategy={formData.strategy}
+        ticker={formData.ticker}
+      />
 
       {/* AI explanation */}
       <div style={{
