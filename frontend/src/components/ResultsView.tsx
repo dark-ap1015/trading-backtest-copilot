@@ -36,9 +36,12 @@ interface BacktestResults {
   stats: string
   explanation: string
   equity_curve: EquityPoint[]
-  trades: Trade[]          // NEW
+  trades: Trade[]
   classifier: ClassifierProfile
   formData: FormData
+  ticker: string
+  start_date: string
+  end_date: string
 }
 
 interface ResultsViewProps {
@@ -215,8 +218,6 @@ export default function ResultsView({ results, onReset }: ResultsViewProps) {
             </LineChart>
           </ResponsiveContainer>
         </div>
-
-        
       )}
 
       <TradeReplay
