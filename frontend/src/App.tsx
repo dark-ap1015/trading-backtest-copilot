@@ -4,9 +4,10 @@ import SignupForm from "./components/SignupForm"
 import StrategyForm from "./components/StrategyForm"
 import ResultsView from "./components/ResultsView"
 import HistoryPanel from "./components/HistoryPanel"
+import CorrelationView from "./components/CorrelationView"
 
 type AuthPhase = "checking" | "login" | "signup" | "authed"
-type AppPhase = "form" | "loading" | "results"
+type AppPhase = "form" | "loading" | "results" | "correlation"
 
 interface FormData {
   strategy: string
@@ -118,21 +119,49 @@ export default function App() {
   // ── Authenticated app ────────────────────────────────────────────────────
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0f172a", color: "#f1f5f9", position: "relative" }}>
+    <div style={{ minHeight: "100vh", background: "#0f172a", color: "#f1f5f9", position: "relative", paddingTop: "60px"}}>
+      {/* Top navigation bar */}
+      <div style={{
+        position: "fixed", top: 0, left: 0, right: 0, height: "60px",
+        background: "#0f172a", borderBottom: "1px solid #1e293b",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 1.5rem", zIndex: 20,
+      }}>
+        <span
+          onClick={() => { setAppPhase("form"); setResults(null); setError(null); }}
+          style={{ fontWeight: 700, fontSize: "1rem", color: "#f1f5f9", cursor: "pointer" }}
+        >
+          AI Backtest Co-pilot
+        </span>
 
-      {/* History toggle button */}
-      <button
-        onClick={() => setHistoryOpen(!historyOpen)}
-        style={{
-          position: "fixed", top: "1.5rem", right: "1.5rem", zIndex: 20,
-          padding: "0.6rem 1rem",
-          background: "#1e293b", border: "1px solid #334155",
-          borderRadius: "8px", color: "#94a3b8",
-          cursor: "pointer", fontSize: "0.85rem",
-        }}
-      >
-        {historyOpen ? "✕ Close" : "View Past Backtests"}
-      </button>
+        {!historyOpen && (
+          <div style={{ display: "flex", gap: "0.75rem" }}>
+            <button
+              onClick={() => setAppPhase("correlation")}
+              style={{
+                padding: "0.5rem 1rem",
+                background: appPhase === "correlation" ? "#3b82f6" : "transparent",
+                border: "1px solid #334155", borderRadius: "8px",
+                color: appPhase === "correlation" ? "#fff" : "#94a3b8",
+                cursor: "pointer", fontSize: "0.85rem",
+              }}
+            >
+              Correlation
+            </button>
+            <button
+              onClick={() => setHistoryOpen(true)}
+              style={{
+                padding: "0.5rem 1rem",
+                background: "transparent", border: "1px solid #334155",
+                borderRadius: "8px", color: "#94a3b8",
+                cursor: "pointer", fontSize: "0.85rem",
+              }}
+            >
+              History
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Sidebar overlay */}
       {historyOpen && (
@@ -164,6 +193,9 @@ export default function App() {
       {appPhase === "loading" && <LoadingScreen />}
       {appPhase === "results" && (
         <ResultsView results={results} onReset={handleReset} />
+      )}
+      {appPhase === "correlation" && (
+        <CorrelationView onBack={() => setAppPhase("form")} />
       )}
     </div>
   )

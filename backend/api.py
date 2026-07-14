@@ -2,6 +2,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+import numpy as np
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 
@@ -312,3 +314,231 @@ def _parse_stats_only(stats_text: str) -> str:
     if "---EQUITY---" in stats_text:
         return stats_text.split("---EQUITY---")[0].strip()
     return stats_text
+
+
+# ── Ticker search ─────────────────────────────────────────────────────────────
+
+TICKER_LIST = [
+    # Major ETFs
+    {"symbol": "SPY", "name": "S&P 500 ETF"},
+    {"symbol": "QQQ", "name": "Nasdaq 100 ETF"},
+    {"symbol": "IWM", "name": "Russell 2000 ETF"},
+    {"symbol": "DIA", "name": "Dow Jones ETF"},
+    {"symbol": "VTI", "name": "Total Stock Market ETF"},
+    {"symbol": "GLD", "name": "Gold ETF"},
+    {"symbol": "TLT", "name": "20+ Year Treasury ETF"},
+    {"symbol": "XLF", "name": "Financial Sector ETF"},
+    {"symbol": "XLK", "name": "Technology Sector ETF"},
+    {"symbol": "XLE", "name": "Energy Sector ETF"},
+    # Mega-cap tech
+    {"symbol": "AAPL", "name": "Apple"},
+    {"symbol": "MSFT", "name": "Microsoft"},
+    {"symbol": "NVDA", "name": "NVIDIA"},
+    {"symbol": "GOOGL", "name": "Alphabet"},
+    {"symbol": "AMZN", "name": "Amazon"},
+    {"symbol": "META", "name": "Meta"},
+    {"symbol": "TSLA", "name": "Tesla"},
+    {"symbol": "NFLX", "name": "Netflix"},
+    {"symbol": "AMD", "name": "Advanced Micro Devices"},
+    {"symbol": "INTC", "name": "Intel"},
+    # Finance
+    {"symbol": "JPM", "name": "JPMorgan Chase"},
+    {"symbol": "GS", "name": "Goldman Sachs"},
+    {"symbol": "BAC", "name": "Bank of America"},
+    {"symbol": "MS", "name": "Morgan Stanley"},
+    {"symbol": "V", "name": "Visa"},
+    {"symbol": "MA", "name": "Mastercard"},
+    # Healthcare
+    {"symbol": "JNJ", "name": "Johnson & Johnson"},
+    {"symbol": "UNH", "name": "UnitedHealth Group"},
+    {"symbol": "PFE", "name": "Pfizer"},
+    {"symbol": "ABBV", "name": "AbbVie"},
+    # Consumer / other
+    {"symbol": "WMT", "name": "Walmart"},
+    {"symbol": "COST", "name": "Costco"},
+    {"symbol": "MCD", "name": "McDonald's"},
+    {"symbol": "NKE", "name": "Nike"},
+    {"symbol": "DIS", "name": "Disney"},
+    {"symbol": "UBER", "name": "Uber"},
+    {"symbol": "ABNB", "name": "Airbnb"},
+    {"symbol": "COIN", "name": "Coinbase"},
+    {"symbol": "PLTR", "name": "Palantir"},
+    {"symbol": "SOFI", "name": "SoFi Technologies"},
+]
+
+
+@app.get("/tickers/search")
+def search_tickers(q: str = "", limit: int = 10):
+    """
+    Returns tickers whose symbol or name contains the query string.
+    Case-insensitive. Used to power the autocomplete dropdown.
+    """
+    q_lower = q.lower().strip()
+    if not q_lower:
+        return TICKER_LIST[:limit]
+
+    results = [
+        t for t in TICKER_LIST
+        if q_lower in t["symbol"].lower() or q_lower in t["name"].lower()
+    ]
+    return results[:limit]
+
+
+# ── Correlation models ────────────────────────────────────────────────────────
+
+class CorrelationRequest(BaseModel):
+    tickers: list[str]
+    strategy: str
+    start: str
+    end: str
+
+
+class TickerResult(BaseModel):
+    ticker: str
+    source: str          # "history" or "fresh"
+    backtest_id: int | None
+    equity_curve: list[dict]
+    stats: str
+
+
+class CorrelationResponse(BaseModel):
+    tickers: list[str]
+    matrix: list[list[float]]     # NxN correlation matrix
+    ticker_results: list[TickerResult]
+
+
+# ── Correlation endpoint ──────────────────────────────────────────────────────
+
+@app.post("/correlation", response_model=CorrelationResponse)
+async def run_correlation(
+    req: CorrelationRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if len(req.tickers) < 2:
+        raise HTTPException(status_code=400, detail="Select at least 2 tickers")
+    if len(req.tickers) > 8:
+        raise HTTPException(status_code=400, detail="Maximum 8 tickers")
+
+    ticker_results: list[TickerResult] = []
+
+    for ticker in req.tickers:
+        # ── Check history first ───────────────────────────────────────────────
+        existing = (
+            db.query(Backtest)
+            .filter(and_(
+                Backtest.user_id == user.id,
+                Backtest.ticker == ticker,
+                Backtest.start_date == req.start,
+                Backtest.end_date == req.end,
+            ))
+            .order_by(Backtest.created_at.desc())
+            .first()
+        )
+
+        if existing and existing.equity_curve:
+            ticker_results.append(TickerResult(
+                ticker=ticker,
+                source="history",
+                backtest_id=existing.id,
+                equity_curve=existing.equity_curve,
+                stats=existing.stats,
+            ))
+            continue
+
+        # ── Run fresh backtest ────────────────────────────────────────────────
+        try:
+            data_profile = classify_strategy(req.strategy)
+            df, df_higher = fetch_data(ticker, req.start, req.end, data_profile)
+            code = generate_code(req.strategy, ticker, req.start, req.end, data_profile)
+            output = run_code(code, data_profile, df, df_higher)
+
+            if not output:
+                raise ValueError("Backtest produced no output")
+
+            stats_text = "\n".join(output)
+            if "Total Return" not in stats_text:
+                raise ValueError("No trades generated")
+
+            stats_clean = _parse_stats_only(stats_text)
+            equity_curve = _parse_equity_curve(stats_text)
+            trades = _parse_trades(stats_text)
+            explanation = explain_results(req.strategy, ticker, req.start, req.end, stats_clean)
+
+            # Save to history
+            saved = Backtest(
+                user_id=user.id,
+                strategy=req.strategy,
+                ticker=ticker,
+                start_date=req.start,
+                end_date=req.end,
+                stats=stats_clean,
+                explanation=explanation,
+                equity_curve=equity_curve,
+                trades=trades,
+                classifier=data_profile,
+            )
+            db.add(saved)
+            db.commit()
+            db.refresh(saved)
+
+            ticker_results.append(TickerResult(
+                ticker=ticker,
+                source="fresh",
+                backtest_id=saved.id,
+                equity_curve=equity_curve,
+                stats=stats_clean,
+            ))
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Backtest failed for {ticker}: {str(e)}"
+            )
+
+    # ── Compute pairwise correlation matrix ───────────────────────────────────
+    matrix = _compute_correlation_matrix(ticker_results)
+
+    return CorrelationResponse(
+        tickers=req.tickers,
+        matrix=matrix,
+        ticker_results=ticker_results,
+    )
+
+
+def _compute_correlation_matrix(results: list[TickerResult]) -> list[list[float]]:
+    """
+    Computes pairwise Pearson correlation of daily equity curve returns.
+    Uses daily returns (pct_change) rather than raw values so different
+    starting portfolio sizes don't skew the correlation.
+    """
+    import pandas as pd
+
+    series_map: dict[str, pd.Series] = {}
+
+    for r in results:
+        if not r.equity_curve:
+            continue
+        df = pd.DataFrame(r.equity_curve)
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+        df = df.drop_duplicates("date").set_index("date").sort_index()
+        series_map[r.ticker] = df["value"].pct_change().dropna()
+
+    tickers = [r.ticker for r in results]
+    n = len(tickers)
+    matrix = [[1.0] * n for _ in range(n)]
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            t1, t2 = tickers[i], tickers[j]
+            if t1 not in series_map or t2 not in series_map:
+                matrix[i][j] = matrix[j][i] = 0.0
+                continue
+            s1, s2 = series_map[t1].align(series_map[t2], join="inner")
+            if len(s1) < 5:
+                matrix[i][j] = matrix[j][i] = 0.0
+                continue
+            corr = float(np.corrcoef(s1, s2)[0, 1])
+            matrix[i][j] = matrix[j][i] = round(corr, 4)
+
+    return matrix
